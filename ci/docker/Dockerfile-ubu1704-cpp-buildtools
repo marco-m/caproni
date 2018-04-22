@@ -1,0 +1,11 @@
+FROM ubuntu:17.04
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        clang \
+        cmake \
+        g++ \
+        gcc \
+        make \
+        ninja-build \
+    && rm -rf /var/lib/apt/lists/*

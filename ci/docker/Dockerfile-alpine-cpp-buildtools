@@ -1,0 +1,11 @@
+FROM alpine
+
+# https://wiki.alpinelinux.org/wiki/Alpine_Linux_package_management
+# clang 186 MB!!!
+
+RUN apk update        \
+    && apk add        \
+        cmake         \
+        g++           \
+        make          \
+        ninja
