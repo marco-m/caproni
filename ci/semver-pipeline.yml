@@ -1,0 +1,119 @@
+#
+# Example pipeline with semver versioning. Makes sense for a product released
+# from the master branch. No release maintenance branches (1.2.X).
+#
+# Based on https://raw.githubusercontent.com/concourse/pipelines/master/examples/wing-flex/semver-example.yml
+
+# fly -t vm set-pipeline --pipeline semver --config ci/semver-pipeline.yml --load-vars-from credentials.yml 
+# fly -t vm unpause-pipeline --pipeline semver
+# fly -t vm trigger-job --job semver/build --watch
+# fly -t vm check-resource --resource semver/caproni.git
+
+resources:
+
+- name: caproni.git
+  type: git
+  source:
+    uri: https://github.com/marco-m/caproni.git
+    branch: master
+
+- name: version
+  type: semver
+  source:
+    driver: s3
+    initial_version: 1.0.0
+    bucket: caproni
+    key: _concourse/version
+    endpoint: ((minio-endpoint))
+    access_key_id: ((s3-access-key-id))
+    secret_access_key: ((s3-secret-access-key))
+
+- name: caproni-artifacts.s3
+  type: s3
+  source:
+    bucket: caproni
+    regexp: artifacts/caproni-(.*).tgz
+    endpoint: ((minio-endpoint))
+    access_key_id: ((s3-access-key-id))
+    secret_access_key: ((s3-secret-access-key))
+
+- name: caproni-final.s3
+  type: s3
+  source:
+    bucket: caproni
+    regexp: final/caproni-(.*).tgz
+    endpoint: ((minio-endpoint))
+    access_key_id: ((s3-access-key-id))
+    secret_access_key: ((s3-secret-access-key))
+
+jobs:
+
+- name: build
+  serial_groups: [version]
+  plan:
+  # TODO: aggregate, add windows, mac
+  - get: caproni.git
+    trigger: true
+  - get: version
+    params: {pre: rc}
+  - task: build-linux
+    file: caproni.git/ci/build-linux-task.yml
+  - put: caproni-artifacts.s3
+    params: {file: build/caproni-*.tgz}
+  - put: version
+    params: {file: version/version}
+
+- name: unit
+  plan:
+  # TODO: aggregate, add windows, mac
+  - get: caproni.git
+    passed: [build]
+  - get: caproni-artifacts.s3
+    passed: [build]
+    trigger: true
+  - task: unit-linux
+    file: caproni.git/ci/unit-linux-task.yml
+
+- name: integration
+  plan:
+  - get: caproni.git
+    passed: [unit]
+  - get: caproni-artifacts.s3
+    passed: [unit]
+    trigger: true
+  - task: integration
+    file: caproni.git/ci/integration-linux-task.yml
+
+- name: shipit
+  serial_groups: [version]
+  plan:
+  - get: caproni.git
+    passed: [integration]
+  - get: caproni-artifacts.s3
+    passed: [integration]
+  - get: version
+    params: {bump: final}
+  - task: promote-to-final
+    file: caproni.git/ci/promote-to-final-task.yml
+  - put: caproni-final.s3
+    params: {file: promote-to-final/caproni-*.tgz}
+  - put: version
+    params: {file: version/version}
+
+- name: major
+  plan:
+  - put: version
+    params: {bump: major, pre: rc}
+
+- name: minor
+  plan:
+  - put: version
+    params: {bump: minor, pre: rc}
+
+- name: patch
+  plan:
+  - get: version
+    passed: [shipit]
+    trigger: true
+  - put: version
+    params: {bump: patch, pre: rc}

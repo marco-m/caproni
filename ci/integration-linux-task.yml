@@ -1,0 +1,19 @@
+---
+platform: linux
+image_resource:
+  type: docker-image
+  source: {repository: marcomm/ready-to-build, tag: latest}
+inputs:
+  - name: caproni.git
+  - name: caproni-artifacts.s3
+outputs:
+  - name: build
+run:
+  path: /bin/sh
+  args:
+    - -c
+    - |
+      set -o errexit
+      set -o xtrace
+      tar xzfv caproni-artifacts.s3/caproni-*.tgz
+      ./out/caproni
