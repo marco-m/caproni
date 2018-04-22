@@ -13,6 +13,7 @@ resources:
 
 - name: caproni.git
   type: git
+  version: {ref: 60c315a7963f5449d38b7f601ee35ba2940dfe9c}
   source:
     uri: https://github.com/marco-m/caproni.git
     branch: master
@@ -51,17 +52,19 @@ jobs:
 - name: build
   serial_groups: [version]
   plan:
-  # TODO: aggregate, add windows, mac
-  - get: caproni.git
-    trigger: true
-  - get: version
-    params: {pre: rc}
-  - task: build-linux
-    file: caproni.git/ci/build-linux-task.yml
-  - put: caproni-artifacts.s3
-    params: {file: build/caproni-*.tgz}
-  - put: version
-    params: {file: version/version}
+  - do:
+    # TODO: aggregate, add windows, mac
+    - get: caproni.git
+      trigger: true
+    - get: version
+      params: {pre: rc}
+    - task: build-linux
+      file: caproni.git/ci/build-linux-task.yml
+    - put: caproni-artifacts.s3
+      params: {file: build/caproni-*.tgz}
+    - put: version
+      params: {file: version/version}
+    timeout: 30m
 
 - name: unit
   plan:
