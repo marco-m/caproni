@@ -1,0 +1,100 @@
+#
+# Example pipeline with timestamp versioning.
+#
+
+---
+resources:
+
+  - name: caproni-native.git
+    type: git
+    source:
+      uri: https://github.com/marco-m/caproni-native.git
+      branch: master
+
+  - name: artifacts.s3
+    type: s3
+    source:
+      regexp: banana-(.*).tgz
+      bucket: channel
+      endpoint: ((minio-endpoint))
+      access_key_id: ((s3-access-key-id))
+      secret_access_key: ((s3-secret-access-key))
+
+jobs:
+
+  - name: build
+    plan:
+      - get: caproni-native.git
+        trigger: true
+      - task: build-linux
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source: {repository: marcomm/ready-to-build, tag: latest}
+          inputs:
+            - name: caproni-native.git
+          outputs:
+            - name: out
+          run:
+            path: /bin/sh
+            args:
+              - -c
+              - |
+                set -o errexit
+                set -o xtrace
+                pwd
+                find .
+                cmake --version
+
+                echo
+                mkdir build
+                cd build
+                cmake ../caproni-native.git
+
+                echo
+                cmake --build .
+                find out
+
+                echo
+                tar czf banana-$(date '+%Y%m%d%H%M%S').tgz out
+                mv banana-*.tgz ../out/
+      - put: artifacts.s3
+        params:
+          file: out/banana-*.tgz
+
+  # - name: unit-tests
+  #   plan:
+  #     - get: caproni-native.git
+  #       passed: [build]
+  #     - get: rsync
+  #       passed: [build]
+  #       trigger: true
+  #     - task: unit-test-linux
+  #       file: concourse-native/ci/unit-test-task.yml
+
+
+# printing informations about this container, would be even better about
+# the concourse worker
+#/proc/self/cgroup and using this to discover the information is available in
+#/sys/fs/cgroup/memory/user.slice/memory.stat
+#
+#HOSTNAME
+#
+# cat /proc/self/cgroup | grep 'docker' | sed 's/^.*\///' | tail -n
+
+#########
+
+# #!/bin/sh
+
+# set -e
+# set -x
+
+# pwd
+# ls
+
+# echo
+# cd rsync/bin
+
+# echo
+# ./banana
